@@ -277,6 +277,7 @@ function cardTile(name, description) {
   const art = node('a', 'View card on Scryfall');
   const printedName = name.replaceAll('’', "'");
   art.href = 'https://scryfall.com/search?q=' + encodeURIComponent('set:tbth !"' + printedName + '"');
+  if (name === 'Unquenchable Fury') art.href = 'https://scryfall.com/card/tbth/10/unquenchable-fury';
   art.target = '_blank';
   art.rel = 'noopener noreferrer';
   art.setAttribute('aria-label', 'View ' + name + ' on Scryfall (opens in a new tab)');
@@ -299,7 +300,16 @@ function cardArt(name, tapped) {
     format: 'image',
     version: 'normal'
   });
-  art.src = 'https://api.scryfall.com/cards/named?' + query.toString();
+  if (name === 'Unquenchable Fury') {
+    const showUnavailable = art.onerror;
+    art.onerror = () => {
+      art.onerror = showUnavailable;
+      art.src = 'https://images.scrydex.com/magicthegathering/TBTH-10/large';
+    };
+    art.src = 'https://api.scryfall.com/cards/tbth/10?format=image&version=normal';
+  } else {
+    art.src = 'https://api.scryfall.com/cards/named?' + query.toString();
+  }
   frame.append(art);
   return frame;
 }
