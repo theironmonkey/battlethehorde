@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle the Horde! | Tabletop Tracker</title>
+<style>
+:root{color-scheme:dark;--bg:#171211;--panel:#241a17;--line:#5a4135;--light:#faead9;--muted:#d0b7a5;--ember:#ffae76;--red:#843b29}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#43261c,var(--bg) 46rem);color:var(--light);font:1rem/1.5 system-ui,sans-serif}
+main{max-width:1180px;margin:auto;padding:clamp(1rem,4vw,3.5rem)}
+header{padding:1.7rem 0 2rem;border-bottom:1px solid var(--line);margin-bottom:1.2rem}
+h1,h2,h3{font-family:Georgia,serif;line-height:1.1;margin:0 0 .7rem}
+h1{font-size:clamp(3rem,8vw,6rem);color:var(--ember);letter-spacing:-.045em}
+h2{font-size:1.65rem}h3{font-size:1.13rem}
+p{margin:.45rem 0;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:1rem}
+section,details{background:var(--panel);border:1px solid var(--line);border-radius:.7rem;padding:1.1rem;grid-column:span 12}
+.half{grid-column:span 6}.third{grid-column:span 4}
+.row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+label{display:grid;gap:.25rem;color:var(--muted)}
+button,input,select{font:inherit;border:1px solid #846253;border-radius:.38rem;background:#1b1412;color:var(--light);padding:.47rem .7rem;min-height:2.55rem}
+button{cursor:pointer}button:hover:not(:disabled){border-color:var(--ember)}button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.primary{background:var(--red);border-color:#d98a64;font-weight:700}
+input[type=number]{width:6.3rem}input[type=text]{width:min(16rem,100%)}
+strong.stat{font-size:1.65rem;color:var(--ember)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:.65rem;margin-top:.7rem}
+.card{border:1px solid var(--line);border-left:4px solid var(--ember);padding:.75rem;background:#1c1512;border-radius:.4rem}
+#battlefield,#revealed{grid-template-columns:repeat(auto-fill,minmax(min(100%,215px),1fr))}
+.card-art{display:grid;place-items:center;aspect-ratio:488/680;margin:0 0 .7rem;border-radius:.55rem;overflow:hidden;background:#2f211c;color:var(--muted);text-align:center}
+.card-art img{display:block;width:100%;height:100%;object-fit:contain}
+.card-art.tapped img{width:71%;height:71%;transform:rotate(90deg)}
+.card-art p{padding:.75rem}
+.card.artifact{border-left-color:#c8ab70}.card p{font-size:.88rem}
+.card button{font-size:.85rem;min-height:2.25rem;padding:.25rem .45rem}
+#phase,#outcome{color:var(--ember);font-weight:700}
+#outcome:empty{display:none}
+#log{max-height:15rem;overflow:auto;padding-left:1.4rem;margin-bottom:0}
+#log li{margin:.25rem 0}
+#yard{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,135px),1fr));gap:.65rem;max-height:29rem;overflow:auto;padding:0;margin:.7rem 0 0;list-style:none}
+#yard .card{padding:.45rem;height:100%}
+#yard .card h3{font-size:1rem}
+#yard .card-art{margin-bottom:.4rem}
+a{color:var(--ember);text-underline-offset:.2em}
+.card a{display:inline-block;font-size:.85rem;margin-bottom:.4rem}
+summary{cursor:pointer;font-weight:700;color:var(--ember)}
+[hidden]{display:none!important}
+@media(max-width:770px){.half,.third{grid-column:span 12}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Battle the Horde!</h1><p>The tracker shuffles and reveals the Horde deck. Handle player spells, blocks, and combat damage at the table.</p></header>
+<div class="grid">
+<section id="setup">
+<h2>Game setup</h2>
+<form id="start" class="row">
+<label>Opening turns<select name="opening"><option value="2">2 · Harder</option><option value="3" selected>3 · Standard</option><option value="4">4 · Easier</option></select></label>
+<label>Starting life<input name="life" type="number" min="1" value="20" required></label>
+<p>60-card Horde deck · shuffled at the start of each game</p>
+<label>Hero 1<input name="hero1" type="text" maxlength="60" placeholder="Optional"></label>
+<label>Hero 2<input name="hero2" type="text" maxlength="60" placeholder="Optional"></label>
+<label>Hero 3<input name="hero3" type="text" maxlength="60" placeholder="Optional"></label>
+<button class="primary">Start game</button>
+</form></section>
+<section class="third"><h2>Player</h2><div class="row"><strong class="stat" id="life">—</strong><button id="lifeDown" aria-label="Lose 1 life">−1</button><button id="lifeUp" aria-label="Gain 1 life">+1</button><button id="emptyDraw">Failed draw</button></div><div class="cards" id="heroes"></div></section>
+<section class="third"><h2>Horde library</h2><strong class="stat" id="library">—</strong><p id="millHint">Mill cards from the top of the Horde deck.</p><form id="mill" class="row"><label id="manualMill" hidden>Top card<select id="millCard"></select></label><button>Mill card</button></form></section>
+<section class="third"><h2>Turn</h2><p id="phase" role="status"></p><p id="hint"></p><p id="outcome" role="status"></p><div class="row"><button class="primary" id="advance">End player turn</button><button id="undo">Undo</button><button id="reset">New game</button></div></section>
+<section id="resolution" hidden><h2>Resolve the Horde’s cards</h2><p id="resolutionInfo"></p><form id="reveal" class="row"><label>Revealed card<select id="revealCard"></select></label><button class="primary">Record reveal</button></form><div class="cards" id="revealed"></div></section>
+<section id="reward" hidden><h2>Hero’s rewards</h2><div id="rewardContent"></div></section>
+<section><h2>Horde battlefield</h2><p id="effects"></p><div class="cards" id="battlefield"></div></section>
+<section class="half"><h2>Horde graveyard</h2><ol id="yard" aria-label="Horde graveyard, newest first"></ol><p id="yardEmpty">No cards in the Horde graveyard.</p></section>
+<section class="half"><h2>Battle log</h2><ol id="log"></ol></section>
+<details><summary>Challenge quick reference</summary>
+<ul>
+<li>Bring up to three different Heroes. The player can attack or target the Horde from the first turn.</li>
+<li>For each life the Horde would lose, mill one card. Artifact rewards trigger when those cards reach the graveyard from any zone.</li>
+<li>At the Horde’s precombat main phase, reveal two cards plus one for each artifact in play when that phase starts. Cast the revealed cards.</li>
+<li>Make choices for the Horde. Ignore its draws, discards, and impossible actions. Send Horde permanents to its graveyard if they would move to another zone besides its library.</li>
+<li>Win when the Horde has an empty library and zero creatures. Lose when your life reaches zero or you fail a required draw.</li>
+</ul><p><a href="https://scryfall.com/sets/tbth" target="_blank" rel="noopener noreferrer">Browse the full set on Scryfall</a></p><div class="cards" id="reference"></div></details>
+</div></main>
+<script>
+'use strict';
+const cards = {
+  'Minotaur Goreseeker': {type:'creature', haste:true, text:'Haste. Attacks each turn if able.'},
+  'Minotaur Younghorn': {type:'creature', haste:true, text:'Haste. Attacks each turn if able.'},
+  'Mogis’s Chosen': {type:'creature', text:'Enters tapped. Attacks each turn if able.'},
+  'Phoberos Reaver': {type:'creature', haste:true, text:'Haste. Attacks each turn if able.'},
+  'Reckless Minotaur': {type:'creature', haste:true, text:'Haste. Attacks each turn if able. Destroy it at the beginning of the end step.'},
+  'Consuming Rage': {type:'sorcery', text:'Each copy gives attacking Minotaurs +2/+0 and destroys them at end of combat.'},
+  'Descend on the Prey': {type:'sorcery', text:'Attacking Minotaurs gain first strike and must be blocked if able.'},
+  'Intervention of Keranos': {type:'sorcery', text:'At the beginning of combat, each copy deals 3 damage to each creature.'},
+  'Touch of the Horned God': {type:'sorcery', text:'Attacking Minotaurs gain deathtouch for the turn.'},
+  'Unquenchable Fury': {type:'sorcery', text:'A Minotaur can only be blocked by two or more creatures this turn.'},
+  'Altar of Mogis': {type:'artifact', text:'Reward · The Horde sacrifices two Minotaurs.'},
+  'Massacre Totem': {type:'artifact', text:'Reward · Mill seven Horde cards.'},
+  'Plundered Statue': {type:'artifact', text:'Reward · Draw one card from your player library.'},
+  'Refreshing Elixir': {type:'artifact', text:'Reward · Gain 5 life.'},
+  'Vitality Salve': {type:'artifact', text:'Reward · Return a creature from your graveyard to play, if possible.'}
+};
+const deckCounts = {
+  'Altar of Mogis': 1,
+  'Consuming Rage': 2,
+  'Descend on the Prey': 2,
+  'Intervention of Keranos': 2,
+  'Massacre Totem': 1,
+  'Minotaur Goreseeker': 10,
+  'Minotaur Younghorn': 15,
+  'Mogis’s Chosen': 4,
+  'Phoberos Reaver': 10,
+  'Plundered Statue': 2,
+  'Reckless Minotaur': 4,
+  'Refreshing Elixir': 2,
+  'Touch of the Horned God': 2,
+  'Unquenchable Fury': 2,
+  'Vitality Salve': 1
+};
+function shuffledDeck() {
+  const deck = Object.entries(deckCounts).flatMap(([name, copies]) => Array(copies).fill(name));
+  for (let index = deck.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [deck[index], deck[other]] = [deck[other], deck[index]];
+  }
+  return deck;
+}
+const $ = id => document.getElementById(id);
+const key = 'battle-horde-tabletop-v1';
+let game = null;
+let history = [];
+try { ({game, history} = JSON.parse(localStorage.getItem(key)) || {game, history}); } catch {}
+function node(tag, text, className) {
+  const item = document.createElement(tag);
+  if (text) item.textContent = text;
+  if (className) item.className = className;
+  return item;
+}
+function button(label, action, disabled = false) {
+  const control = node('button', label);
+  control.type = 'button';
+  control.disabled = disabled;
+  control.onclick = action;
+  return control;
+}
+function record(message) { game.log.unshift(message); }
+function active() { return game && !game.result; }
+function update(action) {
+  if (game) history.push(structuredClone(game));
+  if (history.length > 150) history.shift();
+  action();
+  if (game && !game.result && game.library === 0 && game.left === 0 &&
+      !game.revealed.length && !game.rewards.length &&
+      !game.board.some(card => cards[card.name].type === 'creature')) {
+    game.result = 'Victory! The Horde has no library cards or creatures.';
+    record(game.result);
+  }
+  refresh();
+}
+function refresh() {
+  try { localStorage.setItem(key, JSON.stringify({game, history})); } catch {}
+  render();
+}
+function lose(reason) {
+  game.result = reason;
+  record(reason);
+}
+function changeLife(amount) {
+  game.life += amount;
+  record(amount > 0 ? 'Player gains ' + amount + ' life.' : 'Player loses ' + -amount + ' life.');
+  if (game.life <= 0) lose('Defeat. Your life reached zero.');
+}
+function bury(name) {
+  game.yard.unshift(name);
+  if (cards[name].type === 'artifact') {
+    game.rewards.push({name, remaining:null});
+    record(name + ' triggers its Hero’s Reward.');
+  }
+}
+function move(card, destination = null) {
+  game.board = game.board.filter(item => item.id !== card.id);
+  if (destination) {
+    if (destination === 'bottom') game.deck?.unshift(card.name);
+    else game.deck?.push(card.name);
+    game.library++;
+    record(card.name + ' returns to the ' + destination + ' of the library.');
+  } else {
+    bury(card.name);
+    record(card.name + ' goes to the graveyard.');
+  }
+}
+function creatures() { return game.board.filter(card => cards[card.name].type === 'creature'); }
+function takeTop(manualName) {
+  game.library--;
+  return game.deck ? game.deck.pop() : manualName;
+}
+function reveal(manualName) {
+  const name = takeTop(manualName);
+  game.left--;
+  game.revealed.push({id:game.nextId++, name});
+  record('Revealed ' + name + '.');
+}
+function cast(card) {
+  game.revealed = game.revealed.filter(item => item.id !== card.id);
+  const data = cards[card.name];
+  if (data.type === 'sorcery') {
+    game.effects.push(card.name);
+    bury(card.name);
+  } else {
+    game.board.push({...card, entered:game.round, tapped:card.name === 'Mogis’s Chosen', attacked:false});
+  }
+  record('The Horde casts ' + card.name + '.');
+}
+function mill(manualName) {
+  const name = takeTop(manualName);
+  const reward = game.rewards[0];
+  if (reward?.name === 'Massacre Totem' && reward.remaining > 0) {
+    reward.remaining--;
+    if (reward.remaining === 0) game.rewards.shift();
+  }
+  bury(name);
+  record('Milled ' + name + '.');
+}
+function advance() {
+  switch (game.phase) {
+    case 'player':
+      if (game.openingLeft > 1) {
+        game.openingLeft--;
+        game.playerTurn++;
+        record('Player turn ' + game.playerTurn + '.');
+        return;
+      }
+      game.openingLeft = 0;
+      game.round++;
+      game.board.forEach(card => { card.tapped = false; card.attacked = false; });
+      game.left = Math.min(game.library, 2 + game.board.filter(card => cards[card.name].type === 'artifact').length);
+      game.phase = 'main';
+      record('Horde turn ' + game.round + '. Reveal ' + game.left + ' card(s).');
+      if (game.deck) {
+        while (game.left > 0) reveal();
+      }
+      break;
+    case 'main': {
+      game.phase = 'begin';
+      const damage = game.effects.filter(name => name === 'Intervention of Keranos').length * 3;
+      if (damage) record('Beginning of combat · Deal ' + damage + ' damage to each creature in 3-damage events.');
+      break;
+    }
+    case 'begin':
+      game.phase = 'combat';
+      creatures().forEach(card => {
+        card.attacked = !card.tapped && (card.entered < game.round || cards[card.name].haste);
+        if (card.attacked) card.tapped = true;
+      });
+      record(creatures().filter(card => card.attacked).length + ' Minotaur(s) marked as attackers.');
+      break;
+    case 'combat':
+      if (game.effects.includes('Consuming Rage')) creatures().filter(card => card.attacked).forEach(card => move(card));
+      game.phase = 'endCombat';
+      record('End of combat.');
+      break;
+    case 'endCombat':
+      creatures().filter(card => card.name === 'Reckless Minotaur').forEach(card => move(card));
+      game.phase = 'end';
+      record('Horde end step.');
+      break;
+    case 'end':
+      game.effects = [];
+      game.board.forEach(card => {card.attacked = false;});
+      game.phase = 'player';
+      game.playerTurn++;
+      record('Player turn ' + game.playerTurn + '.');
+  }
+}
+function cardTile(name, description) {
+  const item = node('article', '', 'card ' + cards[name].type);
+  const art = node('a', 'View card on Scryfall');
+  const printedName = name.replaceAll('’', "'");
+  art.href = 'https://scryfall.com/search?q=' + encodeURIComponent('set:tbth !"' + printedName + '"');
+  art.target = '_blank';
+  art.rel = 'noopener noreferrer';
+  art.setAttribute('aria-label', 'View ' + name + ' on Scryfall (opens in a new tab)');
+  item.append(node('h3', name), node('p', description ?? cards[name].text), art);
+  return item;
+}
+function cardArt(name, tapped) {
+  const frame = node('div', '', tapped ? 'card-art tapped' : 'card-art');
+  const art = node('img');
+  art.alt = name + ' card';
+  art.loading = 'lazy';
+  art.decoding = 'async';
+  art.referrerPolicy = 'no-referrer';
+  art.onerror = () => {
+    frame.replaceChildren(node('p', 'Card image unavailable. Use the Scryfall link below.'));
+  };
+  const query = new URLSearchParams({
+    exact: name.replaceAll('’', "'"),
+    set: 'tbth',
+    format: 'image',
+    version: 'normal'
+  });
+  art.src = 'https://api.scryfall.com/cards/named?' + query.toString();
+  frame.append(art);
+  return frame;
+}
+function drawReward() {
+  const reward = game?.rewards[0];
+  $('reward').hidden = !reward;
+  $('rewardContent').replaceChildren();
+  if (!reward) return;
+  const {name, remaining} = reward;
+  const tile = cardTile(name);
+  $('rewardContent').append(tile);
+  if (name === 'Massacre Totem' && remaining > 0) {
+    tile.append(node('p', 'Mill ' + remaining + ' more using the Horde library control.'));
+    return;
+  }
+  if (name === 'Altar of Mogis' && remaining > 0) {
+    tile.append(node('p', 'Choose ' + remaining + ' Minotaur(s) to sacrifice.'),
+      ...creatures().map(card => button(card.name + ' #' + card.id, () => update(() => {
+        move(card);
+        reward.remaining--;
+        if (!reward.remaining || !creatures().length) game.rewards.shift();
+      }), !active())));
+    return;
+  }
+  tile.append(button('Resolve reward', () => update(() => {
+    switch(name) {
+      case 'Altar of Mogis':
+        reward.remaining = Math.min(2, creatures().length);
+        if (reward.remaining) return;
+        break;
+      case 'Massacre Totem':
+        reward.remaining = Math.min(7, game.library);
+        if (reward.remaining) return;
+        break;
+      case 'Refreshing Elixir': changeLife(5); break;
+    }
+    game.rewards.shift();
+    record('Resolved ' + name + ' reward.');
+  }), !active()));
+}
+const steps = {
+  player:['End player turn', 'Play your turn at the table.'],
+  main:['Begin combat', 'Choose the order to cast the revealed cards.'],
+  begin:['Declare attackers', 'Resolve beginning-of-combat triggers and move destroyed creatures to the graveyard.'],
+  combat:['End combat', 'Resolve blocks and damage at the table. Adjust attacker markers for effects that prevent attacking.'],
+  endCombat:['Begin end step', 'Resolve end-of-combat effects.'],
+  end:['Start player turn', 'Resolve any remaining end-step effects.']
+};
+function render() {
+  $('setup').hidden = !!game;
+  $('life').textContent = game?.life ?? '—';
+  $('library').textContent = game?.library ?? '—';
+  $('outcome').textContent = game?.result ?? '';
+  $('phase').textContent = game ? (game.phase === 'player'
+    ? 'Player turn ' + game.playerTurn
+    : 'Horde turn ' + game.round) : 'Ready to start';
+  $('hint').textContent = !game ? '' : game.openingLeft
+    ? game.openingLeft + ' opening turn(s) remaining, including this one.'
+    : steps[game.phase][1];
+  $('advance').textContent = game ? steps[game.phase][0] : 'End player turn';
+  $('advance').disabled = !active() || !!(game.left || game.revealed.length || game.rewards.length);
+  for (const id of ['lifeDown','lifeUp','emptyDraw']) $(id).disabled = !active();
+  $('undo').disabled = !history.length;
+  $('reset').disabled = !game;
+  const manualDeck = !!game && !game.deck;
+  $('manualMill').hidden = !manualDeck;
+  $('millHint').textContent = manualDeck
+    ? 'This saved game uses a physical deck. Start a new game for automatic reveals.'
+    : 'Mill the top card of the shuffled Horde deck.';
+  $('mill').querySelector('button').disabled = !active() || !game.library ||
+    !!game.left ||
+    !!(game.rewards.length && !game.rewards[0].remaining) ||
+    !!(game.rewards[0]?.name === 'Altar of Mogis');
+  $('resolution').hidden = game?.phase !== 'main';
+  $('reveal').hidden = !manualDeck || !game.left;
+  $('reveal').querySelector('button').disabled = !active();
+  $('resolutionInfo').textContent = game?.left ? game.left + ' more to reveal.'
+    : game?.revealed.length ? 'Select Cast on each card in the order you choose.' : 'All revealed cards are resolved.';
+  $('revealed').replaceChildren(...(game?.revealed ?? []).map(card => {
+    const tile = cardTile(card.name);
+    tile.prepend(cardArt(card.name));
+    tile.append(button('Cast', () => update(() => cast(card)), !active() || !!(game.left || game.rewards.length)));
+    return tile;
+  }));
+  $('heroes').replaceChildren(...(game?.heroes ?? []).map(hero =>
+    button(hero.name + (hero.tapped ? ' · Tapped' : ' · Ready'),
+      () => update(() => {hero.tapped = !hero.tapped;}), !active())));
+  $('effects').textContent = game?.effects.length ? 'Turn effects · ' + game.effects.join(' · ') : '';
+  $('battlefield').replaceChildren(...(game?.board ?? []).map(card => {
+    const creature = cards[card.name].type === 'creature';
+    const status = card.attacked ? 'Attacking' : card.tapped ? 'Tapped' : 'Untapped';
+    const tile = cardTile(card.name, creature ? status + ' · #' + card.id : '+1 reveal starting next Horde turn');
+    const controls = node('div', '', 'row');
+    if (creature) controls.append(button(card.tapped ? 'Untap' : 'Tap',
+      () => update(() => {card.tapped = !card.tapped;}), !active()));
+    if (creature && game.phase === 'combat') controls.append(button(card.attacked ? 'Remove attacker' : 'Mark attacker',
+      () => update(() => {card.attacked = !card.attacked; card.tapped = card.attacked;}), !active()));
+    controls.append(button('Graveyard', () => update(() => move(card)), !active()),
+      button('Library top', () => update(() => move(card, 'top')), !active()),
+      button('Library bottom', () => update(() => move(card, 'bottom')), !active()));
+    tile.prepend(cardArt(card.name, card.tapped));
+    tile.append(controls);
+    return tile;
+  }));
+  if (!$('battlefield').children.length) $('battlefield').append(node('p','No Horde permanents on the battlefield.'));
+  const graveyard = game?.yard ?? [];
+  $('yardEmpty').hidden = graveyard.length > 0;
+  $('yard').hidden = graveyard.length === 0;
+  $('yard').replaceChildren(...graveyard.map(name => {
+    const entry = node('li');
+    const tile = cardTile(name);
+    tile.prepend(cardArt(name));
+    entry.append(tile);
+    return entry;
+  }));
+  $('log').replaceChildren(...(game?.log ?? []).map(entry => node('li', entry)));
+  drawReward();
+}
+for (const id of ['millCard','revealCard']) {
+  for (const name of Object.keys(cards)) $(id).add(new Option(name, name));
+}
+$('reference').append(...Object.entries(cards).map(([name, data]) => cardTile(name,
+  data.type === 'artifact' ? 'Adds one reveal beginning next Horde turn. ' + data.text : data.text)));
+$('start').onsubmit = event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const names = [1,2,3].map(index => data.get('hero' + index).trim()).filter(Boolean);
+  if (new Set(names.map(name => name.toLowerCase())).size !== names.length) {
+    alert('Choose different Hero cards.');
+    return;
+  }
+  history = [];
+  const deck = shuffledDeck();
+  game = {life:Number(data.get('life')), library:deck.length, deck,
+    openingLeft:Number(data.get('opening')), playerTurn:1, round:0, phase:'player',
+    heroes:names.map(name => ({name,tapped:false})), nextId:1,
+    board:[], yard:[], effects:[], rewards:[], revealed:[], left:0,
+    log:['Player turn 1.'], result:''};
+  refresh();
+};
+$('mill').onsubmit = event => {event.preventDefault(); if (!event.currentTarget.querySelector('button').disabled) update(() => mill($('millCard').value));};
+$('reveal').onsubmit = event => {event.preventDefault(); if (active() && !game.deck && game.left) update(() => reveal($('revealCard').value));};
+$('advance').onclick = () => update(advance);
+$('lifeDown').onclick = () => update(() => changeLife(-1));
+$('lifeUp').onclick = () => update(() => changeLife(1));
+$('emptyDraw').onclick = () => update(() => lose('Defeat. You had to draw from an empty library.'));
+$('undo').onclick = () => {game = history.pop(); refresh();};
+$('reset').onclick = () => {
+  if (confirm('Clear this game and return to setup?')) {game = null; history = []; refresh();}
+};
+render();
+</script>
+</body>
+</html>
